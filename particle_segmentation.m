@@ -1,45 +1,49 @@
-% function c_image_segmentation(WFpath,WF_name,Locpath,locName,savepath,savename) 
+%% Particle segmentation from single color data
+
+% Load data and WF images
+% Adjust WF image contrast
+% Binarize and segment
+% Produce overlay images and save the extraced particles
+
+% Other options:
+
+% DBSCAN filter
+% overview plotting
+% save images
+
 
 %% Read Data
 clear, clc, close all
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-pxl=107.99;                                                                 % Pixel size in nm
+pxl = 107.99;                                                                 % Pixel size in nm
 
 %%%%%%%%%%%%%%%%% Manual Input %%%%%%%%%%%%%%%%%%%%%%%
 
-WFpath      = 'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647';
-WF_name     = 'Kog1_GFP_WF2.tif';         
+WFpath      = 'Z:\Christian-Sieben\data_HTP\2016-06-03_humanCent\humanCent_aTub_NB_A647_WF13';
+WF_name     = 'humanCent_aTub_NB_A647_WF13_MMStack_Pos0.ome.tif';         
 
-WFpath      = 'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647';
-WF_name2     = 'Kog1_GFP_NB_WF2.tif';         
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Locpath     = 'Z:\Christian-Sieben\data_HTP\2016-06-03_humanCent\locResults_aTub\humanCent_aTub_NB_A647_13';
+locName     = 'humanCent_aTub_NB_A647_13_MMStack_Pos0_locResults_DC.dat';
 
-base        = 'humanCent_aTub_NB_A647_3';   
-
-Locpath     = 'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647\locResults\2016-08-19_Yest_Kog1_NBA647_10ms_1000mw_1';
-locName     = '2016-08-19_Yest_Kog1_NBA647_10ms_1000mw_1_MMStack_Pos0_locResults_processed.csv';
-
-savename =  'Kog1_NBA647_2_10ms_500mw_1_extractedParticles';
-savepath =  Locpath;%'Y:\Christian-Sieben\data_HTP\2016-06-03_humanCent_Sas6_A647\locsResults_Sas6\FOV2_Sas6_1000mW_10ms_A647_1';
+savename =  'humanCent_aTub_NB_A647_Pos_13_extracted';
+savepath =  'Z:\Christian-Sieben\data_HTP\2016-06-03_humanCent\analysed';
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% Load Data
 
-%% Load image
-
+% Load WF image
 cd(WFpath);
 I=imread(WF_name);
-I2=imread(WF_name2);
 
 % Load data set
 cd(Locpath);
-% name2=[base,'_MMStack_Pos0_locResults_DC.dat'];
 locs=dlmread(locName,',',1,0);
 
 % Load header
-
 file = fopen(locName);
 line = fgetl(file);
 h = regexp( line, ',', 'split' );
@@ -53,10 +57,14 @@ fprintf('\n -- Data loaded --\n')
 %% Adjust segmentation parameters
 close all
 
-% blur the image
-figure('Position',[10 600 500 500],'name','Raw Image'), imshow(I,'InitialMagnification','fit');
+minWF = 10;
+maxWF = 200;
+
+% #1: the original image
+figure('Position',[10 600 500 500],'name','Raw Image'), imshow(I,[minWF maxWF],'InitialMagnification','fit');
+
 % adjust the contrast of the raw image
-I2 = imadjust(I,[0.1 0.2],[]);
+I2 = imadjust(I,[0.1 0.5],[]);
 figure('Position',[600 600 500 500],'name','Image after adjusted contrast'), imshow(I2,'InitialMagnification','fit');
 
 G = fspecial('gaussian',[7 7],50); % lowpass filter of size and gaussian blur sigma, [lowpass filter] sigma
@@ -89,15 +97,15 @@ end
 % Extract subimages from GFP channel
 
 Particles_WF={};
-box_size = 20;
+box_size = 1;
 
-for k=1:length(B)
+for k = 1:length(B)
     
-    if      min(B{k,1}(:,1))<box_size+1 
+    if      min(B{k,1}(:,1))<box_size+1; % if the x minimum overlaps with the border
         
             Particles_WF{k,1} = I((1):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));    
             
-    elseif  min(B{k,1}(:,2))<box_size+1 
+    elseif  min(B{k,1}(:,2))<box_size+1 % if the y minimum overlaps with the border
         
             Particles_WF{k,1} = I((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(1):(max(B{k,1}(:,2))+box_size));    
     
@@ -111,6 +119,7 @@ for k=1:length(B)
     end
            
 end
+
 
 %Find the center of each particle and transform into an X,Y coordinate
 
@@ -161,42 +170,31 @@ fprintf('\n -- %f Particles selected from localitaion dataset --\n',length(Cent)
 
 %% Overlay with Widefield image
 
+close all
+
 % the coordinates need be backtransformed into pxl coordinates
 % 1. divide by correction factor
 % 2. divide trough pxl size
 
-figure
-imshow(I); hold on;
+figure('Position',[100 400 600 600])
+imshow(I,[minWF maxWF]); hold on;
+
 for i=1:length(Cent);
     
 CentO=[];
-CentO(:,1) = Cent{i,1}(:,1)/CFX(:,1);
-CentO(:,2) = Cent{i,1}(:,2)/CFY(:,1);
+CentO(:,1) = Cent{i,1}(:,x)/CFX(:,1);
+CentO(:,2) = Cent{i,1}(:,y)/CFY(:,1);
     
 scatter(CentO(:,1)/pxl,CentO(:,2)/pxl,1,'r');
 
 hold on;
 end
 
-
-
-figure
-imshow(I); hold on;
-CentO = [];
-CentO(:,1) = locs(:,x)/CFX(:,1);
-CentO(:,2) = locs(:,y)/CFX(:,1);;
-scatter(CentO(:,1)/pxl,CentO(:,2)/pxl,1,'r');
-
-
-
-
-
 cd(savepath);
-savefig('Overlay_Sas_6_FOV2.fig');
+savefig(['Overlay_extractedParticles_' savename '.fig']);
 
-% Plot for each Particle (1) the integrate intensitz vs (2) the nbr of locs 
 
-figure
+figure('Position',[700 100 300 300])
 for i=1:length(Cent);
 scatter(length(Cent{i}),Cent{i,2},5,'filled','r');hold on;
 xlabel('Nbr of localizations');
@@ -204,19 +202,33 @@ ylabel('WF integrated intensity');
 box on;
 axis square;
 end
+% 
+% cd(savepath);
+% savefig(['Locs_vs_intInt_' savename '.fig']);
+
+figure('Position',[200 100 300 300])
+for i=1:length(Cent);
+scatter(length(Cent{i}),Cent{i,2}/8400,5,'filled','r');hold on;
+xlabel('Nbr of localizations');
+ylabel('A647 molecules');
+box on;
+axis square;
+end
 
 cd(savepath);
-savefig('Locs_vs_intensity_Sas_6_FOV2.fig');
+savefig(['Locs_vs_molecules_' savename '.fig']);
 
-% Use this to plot all localizations
 
-% figure
-% imshow(I); hold on;
-% scatter(locs(:,x)/pxl,locs(:,y)/pxl,1,'r');
+% Save variable Particles
 
-% Save the overlay figure
+% 1. localization data
+% 2. WF integrated intensity
+% 3. WF Image subset
 
+cd(savepath);
 save(savename,'Cent');
+
+fprintf('\n -- File Saved --\n')
 
 %% DBSCAN particle size Filter
 

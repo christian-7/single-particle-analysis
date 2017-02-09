@@ -1,4 +1,5 @@
 clear, close all, clc
+
 %% Load image
 
 WF_name = 'NB_A647_200mW_filterUp_200ms.tif'
