@@ -1,45 +1,63 @@
-% function c_image_segmentation(WFpath,WF_name,Locpath,locName,savepath,savename) 
+%% Particle segmentation from 2C data
+
+% Load data and WF images
+% Adjust WF image contrast
+% Binarize and segment
+% Produce overlay images and save the extraced particles
+
+% Other options:
+
+% DBSCAN filter
+% overview plotting
+% save images
+
 
 %% Read Data
-
 clear, clc, close all
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-pxl=107.99;                                                                 % Pixel size in nm
+pxl       = 107.99;                                                                 % Pixel size in nm
+number    = 12;                                                                      % image number
+filetype  = 1;                                                                      % 1 for TS, 2 for bstore
+wfnumber  = 13;
 
 %%%%%%%%%%%%%%%%% Manual Input %%%%%%%%%%%%%%%%%%%%%%%
 
-WFpath      = 'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647';
-WF_name     = 'Kog1_GFP_NB_4_WF_5.tif';         
+WFpath     = ['Z:\Christian-Sieben\data_HTP\2016-07-28_Yeast\Kog1_GFP_30C_WF' num2str(wfnumber)];
+WF_name    = ['Kog1_GFP_30C_WF' num2str(wfnumber) '_MMStack_Pos0.ome.tif'];         
 
-WFpath      = 'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647';
-WF_name2    = 'Kog1_GFP_4_1000ms_WF5.tif';         
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% base        = 'humanCent_aTub_NB_A647_3';   
-
-Locpath     = 'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647\locResults\2016-08-19_Yest_Kog1_NBA647_4_10ms_500mw_5';
-locName     = '2016-08-19_Yest_Kog1_NBA647_4_10ms_500mw_5_MMStack_Pos0_locResults_processed_DC.csv';
-
-savename    =  '2016-08-19_Yest_Kog1_NBA647_4_10ms_500mw_5_extractedParticles';
-savepath    =  'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647\locResults\analysis';
-
-savepath_Imgages = 'Z:\Christian-Sieben\data_HTP\2016-09-08_Yeast_Kog1_GFP_NB_A647\locResults\analysis\rendered';
+WFpath2      = ['Z:\Christian-Sieben\data_HTP\2016-07-28_Yeast\Kog1_GFP_30C_NB_A647_WF' num2str(wfnumber)];
+WF_name2     = ['Kog1_GFP_30C_NB_A647_WF' num2str(wfnumber) '_MMStack_Pos0.ome.tif'];      
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+Locpath     = ['Z:\Christian-Sieben\data_HTP\2016-07-28_Yeast\locResults\Yeast_Kog1_GFP_30C_NB_A647_' num2str(number)];
+locName     = ['Yeast_Kog1_GFP_30C_NB_A647_' num2str(number) '_MMStack_Pos0_locResults_DC_TS.csv'];
+
+savename    = ['Yeast_Kog1_GFP_30C_NB_A647' num2str(number) '_extractedParticles_2nd'];
+savepath    =  'Z:\Christian-Sieben\data_HTP\2016-07-28_Yeast\locResults\newAnalysis';
+
+savepath_Imgages = 'Z:\Christian-Sieben\data_HTP\2016-07-28_Yeast\locResults\newAnalysis';
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+cd(Locpath);
 
 %% Load image
 
+% GFP Channel
+
 cd(WFpath);
+I   =   imread(WF_name);
 
-I   =imread(WF_name);
-ICh2  =imread(WF_name2);
+% Storm Channel
 
-% Load data set
+cd(WFpath2);
+ICh2  =  imread(WF_name2);
+
+% Load localization data set
+
 cd(Locpath);
-% name2=[base,'_MMStack_Pos0_locResults_DC.dat'];
 locs=dlmread(locName,',',1,0);
 
 % Load header
@@ -48,9 +66,19 @@ file    = fopen(locName);
 line    = fgetl(file);
 h       = regexp( line, ',', 'split' );
 
+if filetype == 1;
+    
 x       = strmatch('"x [nm]"',h);
 y       = strmatch('"y [nm]"',h);
 LL      = strmatch('"loglikelihood"',h);
+
+else
+
+x       = strmatch('x [nm]',h);
+y       = strmatch('y [nm]',h);
+LL      = strmatch('loglikelihood',h);
+
+end
 
 fprintf('\n -- Data loaded --\n')
 
@@ -58,11 +86,14 @@ fprintf('\n -- Data loaded --\n')
 
 close all
 
+minWF_GFP = 389;
+maxWF_GFP = 8000;
+
 % blur the image
-figure('Position',[10 600 500 500],'name','Raw Image'), imshow(I,'InitialMagnification','fit');
+figure('Position',[10 600 500 500],'name','Raw GFP Image'), imshow(I,[minWF_GFP maxWF_GFP],'InitialMagnification','fit');
 
 % adjust the contrast of the raw image
-I2 = imadjust(I,[0.03 0.1],[]);
+I2 = imadjust(I,[0.06 0.07],[]);
 figure('Position',[600 600 500 500],'name','Image after adjusted contrast'), imshow(I2,'InitialMagnification','fit');
 
 % lowpass filter of size and gaussian blur sigma, [lowpass filter] sigma
@@ -105,55 +136,71 @@ end
 
 % Extract subimages from GFP channel
 
-Particles_WF={};
+Particles_WF  ={};
+Particles_WF2 ={};
+
 box_size = 20;
 
 for k=1:length(B)
     
-    if      min(B{k,1}(:,1))<box_size+1 
-        
-            Particles_WF{k,1} = I((1):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));    
-            
-    elseif  min(B{k,1}(:,2))<box_size+1 
-        
-            Particles_WF{k,1} = I((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(1):(max(B{k,1}(:,2))+box_size));    
+%   the border particles WF ROIs are saved without the box
     
-    elseif  max(B{k,1}(:,1))+box_size>length(I) | max(B{k,1}(:,2))+box_size>length(I)
-        
-            Particles_WF{k,1} = I((min(B{k,1}(:,1))-box_size):(length(I)),(min(B{k,1}(:,2))-box_size):(length(I)));
-        
-    else
-        
-            Particles_WF{k,1} = I((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));   
-    end
+    
+       if      min(B{k,1}(:,1))<box_size+1 | min(B{k,1}(:,2)) < box_size+1 | max(B{k,1}(:,1))+box_size>length(I) | max(B{k,1}(:,2))+box_size>length(I)
+           
+               Particles_WF{k,1} = I((min(B{k,1}(:,1))):(max(B{k,1}(:,1))),(min(B{k,1}(:,2))):(max(B{k,1}(:,2))));
+               Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))):(max(B{k,1}(:,1))),(min(B{k,1}(:,2))):(max(B{k,1}(:,2))));
+           
+       else
+               Particles_WF{k,1}  = I((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));  
+               Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));   
+            
+       end
+    
+    
+%     if      min(B{k,1}(:,1))<box_size+1 % lower side
+%         
+%             Particles_WF{k,1} = I((1):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));    
+%             
+%     elseif  min(B{k,1}(:,2))<box_size+1 % left side
+%         
+%             Particles_WF{k,1} = I((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(1):(max(B{k,1}(:,2))+box_size));    
+%     
+%     elseif  max(B{k,1}(:,1))+box_size>length(I) | max(B{k,1}(:,2))+box_size>length(I) % upper or right side
+%         
+%             Particles_WF{k,1} = I((min(B{k,1}(:,1))-box_size):(length(I)),(min(B{k,1}(:,2))-box_size):(length(I)));
+%         
+%     else
+%             Particles_WF{k,1} = I((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));   
+%     end
            
 end
 
 % Extract subimages from A647 channel
 
-Particles_WF2={};
-box_size = 20;
-
-for k=1:length(B)
-    
-    if      min(B{k,1}(:,1))<box_size+1 
-        
-            Particles_WF2{k,1} = ICh2((1):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));    
-            
-    elseif  min(B{k,1}(:,2))<box_size+1 
-        
-            Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(1):(max(B{k,1}(:,2))+box_size));    
-    
-    elseif  max(B{k,1}(:,1))+box_size>length(ICh2) | max(B{k,1}(:,2))+box_size>length(ICh2)
-        
-            Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))-box_size):(length(ICh2)),(min(B{k,1}(:,2))-box_size):(length(ICh2)));
-        
-    else
-        
-            Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));   
-    end
-           
-end
+% Particles_WF2={};
+% box_size = 20;
+% 
+% for k=1:length(B)
+%     
+%     if      min(B{k,1}(:,1))<box_size+1 
+%         
+%             Particles_WF2{k,1} = ICh2((1):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));    
+%             
+%     elseif  min(B{k,1}(:,2))<box_size+1 
+%         
+%             Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(1):(max(B{k,1}(:,2))+box_size));    
+%     
+%     elseif  max(B{k,1}(:,1))+box_size>length(ICh2) | max(B{k,1}(:,2))+box_size>length(ICh2)
+%         
+%             Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))-box_size):(length(ICh2)),(min(B{k,1}(:,2))-box_size):(length(ICh2)));
+%         
+%     else
+%         
+%             Particles_WF2{k,1} = ICh2((min(B{k,1}(:,1))-box_size):(max(B{k,1}(:,1))+box_size),(min(B{k,1}(:,2))-box_size):(max(B{k,1}(:,2))+box_size));   
+%     end
+%            
+% end
 
 %Find the center of each particle and transform into an X,Y coordinate
 
@@ -164,7 +211,7 @@ for k=1:length(B)
             boundary    = B{k};
             Center(k,1) = (((max(B{k,1}(:,1))-min(B{k,1}(:,1)))/2)+min(B{k,1}(:,1)))*(pxl);             % Center of the segemneted spot in nm
             Center(k,2) = (((max(B{k,1}(:,2))-min(B{k,1}(:,2)))/2)+min(B{k,1}(:,2)))*(pxl);             % Center of the segemneted spot in nm
-            Center(k,3) = max(pdist(B{k,1}))/2;                                                         % Ssize of the box, measure the max distance as input for the box size
+            Center(k,3) = max(pdist(B{k,1}))/1;                                                         % Ssize of the box, measure the max distance as input for the box size
             
 end
 
@@ -212,34 +259,35 @@ fprintf('\n -- %f Particles selected from localitaion dataset --\n',length(Cent)
 
 
 figure('Position',[10 600 500 500],'name','Extracted Particles');
-imshow(I); hold on;
+imshow(I,[minWF_GFP maxWF_GFP]); hold on;
+
 for i=1:length(Cent);
     
 CentO=[];
-CentO(:,1) = Cent{i,1}(:,1)/CFX(:,1);
-CentO(:,2) = Cent{i,1}(:,2)/CFY(:,1);
+CentO(:,1) = Cent{i,1}(:,x)/CFX(:,1);
+CentO(:,2) = Cent{i,1}(:,y)/CFY(:,1);
     
 scatter(CentO(:,1)/pxl,CentO(:,2)/pxl,1,'r');
 
 hold on;
 end
 
-savefig('Overlay_extracted_particles.fig');
+savefig('Overlay_extracted_particles_onGFP.fig');
 
 
-figure('Position',[600 600 500 500],'name','All localizations');
-imshow(I); hold on;
+figure('Position',[1000 600 500 500],'name','All localizations');
+imshow(I,[minWF_GFP maxWF_GFP]); hold on;
 CentO = [];
 CentO(:,1) = locs(:,x)/CFX(:,1);
 CentO(:,2) = locs(:,y)/CFX(:,1);;
 scatter(CentO(:,1)/pxl,CentO(:,2)/pxl,1,'r');
 
 
-savefig('Overlay_all_Locs.fig');
+savefig('Overlay_all_Locs_onGFP.fig');
 
 % Plot for each Particle (1) the integrate intensity vs (2) the nbr of locs 
 
-figure('Position',[10 600 900 300],'name','# of Locs vs. GFP Intensity');
+figure('Position',[400 100 900 300],'name','# of Locs vs. GFP Intensity');
 
 subplot(1,3,1);
 for i=1:length(Cent);
@@ -279,11 +327,13 @@ close all;
 tic
 fprintf('\n -- DBSCAN started --\n')
 
+Cent{length(Cent),6} = [];
+
 for m = 1:length(Cent);
 
 dataDBS      = [];
-dataDBS(:,1) = Cent{m,1}(:,1); % x in mum
-dataDBS(:,2) = Cent{m,1}(:,2); % y in mum
+dataDBS(:,1) = Cent{m,1}(:,x); % x in mum
+dataDBS(:,2) = Cent{m,1}(:,y); % y in mum
 
 if isempty(dataDBS)
    Cent{m,6} = [];
@@ -292,7 +342,7 @@ else
 % Run DBSCAN on each particle 
 
 k   = 10;                                                 % minimum number of neighbors within Eps
-Eps = 15;                                                 % minimum distance between points, nm
+Eps = 20;                                                 % minimum distance between points, nm
 
 % fprintf('\n -- DBSCAN input and parameters selected --\n')
 
@@ -349,21 +399,24 @@ end
 
 end
 
-figure('Position',[10 600 400 400],'name','# of Locs vs. GFP Intensity after DBSCAN');
-
-for i=1:length(Cent);
-    
-    if isempty(Cent{i,6})
-    else
-    
-        scatter(length(Cent{i,6}{1,1}),Cent{i,2},5,'filled','r');hold on;
-        xlabel('Nbr of localizations');
-        ylabel('WF integrated intensity');
-        box on;
-        axis square;
-    end
-    
-end
+% figure('Position',[10 600 400 400],'name','# of Locs vs. GFP Intensity after DBSCAN');
+% 
+% for i=1:length(Cent);
+%     
+%     for j = 1:length(Cent{i,6});
+%     
+%     if isempty(Cent{i,6}{j,1})
+%     else
+%     
+%         scatter(length(Cent{i,6}{j,1}),Cent{i,2},5,'filled','r');hold on;
+%         xlabel('Nbr of localizations');
+%         ylabel('WF GFP integrated intensity');
+%         box on;
+%         axis square;
+%     end
+%     end
+%     
+% end
 
 fprintf(' -- DBSCAN computed in %f sec -- \n',toc)
 
@@ -389,7 +442,7 @@ for i = 1:length(Cent);
             else
             
         subplot(NbrSubplots,NbrSubplots,count);
-        scatter(Cent{i,6}{j,1}(:,1),Cent{i,6}{j,1}(:,2),10,'filled','black');
+        scatter(Cent{i,6}{j,1}(:,x),Cent{i,6}{j,1}(:,y),10,'filled','black');
         title(['ROI :', num2str(i) ' Particle :', num2str(j)],'FontSize',9);
         count = count+1;
         box on
@@ -420,17 +473,17 @@ for i=1:length(Cent);
 for j = 1:length(Cent{i,6});
     
     subplot(NbrSubplots+1,NbrSubplots,count);
-    imshow(Cent{i,3});hold on;
+    imshow(Cent{i,3},[minWF_GFP maxWF_GFP]);hold on;
     
             if isempty(Cent{i,6}{j,1})
             else
                 
 CentO=[];
-CentO(:,1) = Cent{i,1}(:,1)/CFX(:,1);
-CentO(:,2) = Cent{i,1}(:,2)/CFY(:,1);
+CentO(:,1) = Cent{i,1}(:,x)/CFX(:,1);
+CentO(:,2) = Cent{i,1}(:,y)/CFY(:,1);
 
-CentO(:,1) = CentO(:,1)-min(CentO(:,1))+box_size*pxl; % this normalizes to 0
-CentO(:,2) = CentO(:,2)-min(CentO(:,2))+box_size*pxl;
+CentO(:,1) = CentO(:,1)-min(CentO(:,1)) + box_size*pxl; % this normalizes to 0
+CentO(:,2) = CentO(:,2)-min(CentO(:,2)) + box_size*pxl;
 
 scatter(CentO(:,1)/pxl,CentO(:,2)/pxl,1,'r');hold on; % Position over full WF
 title(['ROI :', num2str(i) ' Particle :', num2str(j)],'FontSize',9);
@@ -463,7 +516,7 @@ save(savename,'Cent');
 
 close all
 fprintf('\n -- File Saved --\n')
-
+cd(Locpath);
 %% Save all Particles as Rendered images
 
 pxlsize = 10;
@@ -472,6 +525,7 @@ cd(savepath_Imgages);
 % Determine the box size form the largest particle
 
 im_size = [];
+count = 1;
 
 for i=1:length(Cent);
     
@@ -480,9 +534,11 @@ for i=1:length(Cent);
         if isempty(Cent{i,6}{j,1})
         else
 
-im_size(i,1) = round((max(Cent{i,6}{j,1}(:,2))-min(Cent{i,6}{j,1}(:,2)))/pxlsize);
-im_size(i,2) = round((max(Cent{i,6}{j,1}(:,1))-min(Cent{i,6}{j,1}(:,1)))/pxlsize);
+im_size(count,1) = round((max(Cent{i,6}{j,1}(:,y))-min(Cent{i,6}{j,1}(:,y)))/pxlsize);
+im_size(count,2) = round((max(Cent{i,6}{j,1}(:,x))-min(Cent{i,6}{j,1}(:,x)))/pxlsize);
         
+count = count + 1;
+
         end
     end
 end
@@ -497,10 +553,10 @@ for i = 1:length(Cent);
                 
             else
             
-        heigth =round((max(Cent{i,6}{j,1}(:,1)) - min(Cent{i,6}{j,1}(:,1)))/pxlsize);
-        width = round((max(Cent{i,6}{j,1}(:,2)) - min(Cent{i,6}{j,1}(:,2)))/pxlsize);
+        heigth =round((max(Cent{i,6}{j,1}(:,x)) - min(Cent{i,6}{j,1}(:,x)))/pxlsize);
+        width = round((max(Cent{i,6}{j,1}(:,y)) - min(Cent{i,6}{j,1}(:,y)))/pxlsize);
         
-        rendered = hist3([Cent{i,6}{j,1}(:,2),Cent{i,6}{j,1}(:,1)],[heigth width]);
+        rendered = hist3([Cent{i,6}{j,1}(:,y),Cent{i,6}{j,1}(:,x)],[heigth width]);
         
         empty  = zeros(round(max(max(im_size))*1.5),round(max(max(im_size))*1.5));
         center = round(length(empty)/2);
@@ -533,4 +589,5 @@ count=count+1;
     end
 end
 
+fprintf('\n -- Images Saved --\n')
 cd(Locpath);
